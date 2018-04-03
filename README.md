@@ -1,1 +1,1 @@
-# StorePlusAI
+# This is for StorePlusAI.
