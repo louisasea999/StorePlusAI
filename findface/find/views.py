@@ -111,7 +111,9 @@ def savepic(request):
 			pictime = '2018-04-01 ' + str(pictime_hour) + ':' + str(pictime_min) + ':' + str(pictime_sec)
 			pictime_base['seqno'] = int(snapseq)
 			pictime_base['time'] = pictime
+			print str(pictime)
 		else:
+			print 'delete ',pic_fullpath_hour
 			os.remove(pic_fullpath_hour)
 			os.remove(pic_fullpath_min)
 			os.remove(pic_fullpath_sec)
@@ -595,23 +597,25 @@ def Reg_DateTime(filepath,type):
 	time_str = pytesseract.image_to_string(im)
 	# 删除非数字(-)的字符串 
 	time_str = re.sub(r'\D', "", time_str)
-	time_dig = int(time_str)
-	if len(time_str) == 2:
-		if type == 'hour':
-			if time_dig > 23 or time_dig < 0:
-				return None
+	if time_str != '':
+		time_dig = int(time_str)
+		if len(time_str) == 2:
+			if type == 'hour':
+				if time_dig > 23 or time_dig < 0:
+					return None
+				else:
+					return '%02d'%time_dig
+			elif type == 'min' or type == 'sec':
+				if time_dig > 59 or time_dig < 0:
+					return None
+				else:
+					return '%02d'%time_dig
 			else:
-				return time_dig
-		elif type == 'min' or type == 'sec':
-			if time_dig > 59 or time_dig < 0:
 				return None
-			else:
-				return time_dig
 		else:
 			return None
 	else:
 		return None
-		
 def AddDateTime(picpath):
 	fixtime_num = 0	
 	result = {}
