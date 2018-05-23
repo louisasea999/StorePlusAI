@@ -97,10 +97,10 @@ Your browser does not support the HTML5 canvas tag.
 		snapseq = snapseq + 1;
 		document.getElementById("myCanvas").width = width_full;
 		document.getElementById("myCanvas").height = height_full;
-		ctx.drawImage(v,0,0,width_full,height_full);
 		ctx_hour.drawImage(v,760,80,width_time,height_time,0,0,width_time,height_time);  // hour
 		ctx_min.drawImage(v,855,80,width_time,height_time,0,0,width_time,height_time);  // min
 		ctx_sec.drawImage(v,950,80,width_time,height_time,0,0,width_time,height_time);  // sec
+		ctx.drawImage(v,0,0,width_full,height_full);
 		valid_num = document.getElementById("validnum").value;
 		invalid_num = document.getElementById("invalidnum").value;
 		err_num = document.getElementById("errnum").value;
