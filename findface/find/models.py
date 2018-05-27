@@ -17,7 +17,7 @@ class AllFaces(models.Model):
     facetoken = models.CharField(max_length=32,unique=True,db_index=True)
     picpath = models.CharField(max_length=200)
     picname = models.CharField(max_length=40,null=True)
-    pictime = models.DateTimeField(default='1990-01-01 00:00:00')
+    pictime = models.DateTimeField(null=True)
     #pictime = models.CharField(max_length=20,null=True)
     snapint = models.IntegerField(null=True)
     snapseq = models.IntegerField(null=True)
