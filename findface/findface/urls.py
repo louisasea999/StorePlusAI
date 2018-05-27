@@ -21,6 +21,6 @@ urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     url(r'^index/', views.getmain,name="name"),
     url(r'^savepic/', views.savepic,name="name"),
-    url(r'^fixpic/', views.fixpic,name="name"),
-    url(r'^addtofaceset/', views.addtofaceset,name="name"),
+    #url(r'^fixpic/', views.fixpic,name="name"),
+    #url(r'^addtofaceset/', views.addtofaceset,name="name"),
 ]
