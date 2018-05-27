@@ -1,0 +1,62 @@
+<!DOCTYPE html>  
+<head>  
+    <title>FindFace</title>  
+	 <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <script type="text/javascript" src="/static/jquery-3.2.1.min.js"></script>
+</head>  
+<body>
+
+<div id="div1">
+请输入要分析视频的绝对路径，或者视频所在文件夹的绝对路径，比如:<br>
+ C:\videosamples\test.mp4 或者  C:\videosamples<br>
+<input type="text" id="filepath" value='' size = "80" ><br><br>
+请输入一个大于等于1秒的截图时间间隔: 
+<input type="text" id="intsec" value=1 size = "2" ><br><br>
+<input  type="button" value="开始分析" onclick="startSnap();"  />
+</div><br><br>
+
+<div id="div2" hidden>
+<h3>正在分析，请耐心等待。。。</h3>
+</div>
+
+<div id="div3" hidden>
+<h3>分析结果</h3>
+<textarea id="resultCon" disabled cols="90" style="resize:none;overflow-y: hidden;height:20px" onpropertychange="this.style.height = this.scrollHeight + 'px';" oninput="this.style.height = this.scrollHeight + 'px';">
+</textarea> 
+</div>
+<script type="text/javascript">  
+    var textarea=document.getElementById('resultCon');
+
+	var filepath;
+	var intsec;
+
+    function startSnap() {
+    	intsec = document.getElementById("intsec").value;
+    	filepath = document.getElementById("filepath").value;
+    	document.getElementById("div2").removeAttribute("hidden");
+    	document.getElementById("div3").setAttribute("hidden","hidden");
+    	if (intsec == '' || intsec < 1) {
+    		alert("请输入一个大于等于1秒的截图时间间隔");
+    	}
+    	else {
+    		$.ajax({
+				type:"post",
+				url:"http://127.0.0.1:8000/savepic/",  //调试地址
+				dataType:"json",
+				data:{"filepath":filepath,"intsec":intsec},
+				success:function(data){
+					alert('分析完成')
+					$("#resultCon").val(data['data_info']);
+					$("#div3").removeAttr("hidden"); 
+					textarea.style.height = textarea.scrollHeight + 'px';
+					document.getElementById("div2").setAttribute("hidden","hidden");
+				},
+				error:function() {
+					//alert('failed');
+				},
+			});
+    	};
+    };
+</script>
+</body>
