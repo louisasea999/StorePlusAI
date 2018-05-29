@@ -62,23 +62,18 @@ def savepic(request):
 	interval_sec = int(request.POST["intsec"])
 	file_path = request.POST["filepath"]
 	
+	#process every videos in folder or only single one video
 	if os.path.isdir(file_path):
 		handlevideos = HandleAllVideos(file_path,interval_sec)
 	elif os.path.isfile(file_path):
 		f = file_path.split('\\')[-1]
 		root = ('\\').join(file_path.split('\\')[0:-1]) 
-		snapshot_dir = os.path.join(root,'snapshots_') + f + '_' + str(interval_sec)
-		if CheckVideo(f):
+		if CheckVideo(f):	
 			HandleSingleVideo(root,f,interval_sec)
-			handlevideos.append({'snapshot_dir':snapshot_dir,'file_fullpath':file_path})
-	
-	try_limit = 20
-	try_count = 0
+			handlevideos.append(file_path)
+
 	#Fix error pics
-	fixpic_status = True
-	while fixpic_status and try_count <= try_limit:
-		fixpic_status = FixPic()
-		try_count += 1
+	FixPic()
 		
 	#Add time
 	ADT_result = AddDateTime()
@@ -89,14 +84,15 @@ def savepic(request):
 	newfaceset_num = ATF_result[0] 
 	updfaceset_num = ATF_result[1]
 	
+	#output result to web
 	if len(handlevideos) > 0:
 		if len(handlevideos) == 1:
 			rst_ctx = 'Analyzed 1 video, details as below:\r\n'
 		if len(handlevideos) > 1:
 			rst_ctx = 'Analyzed '+str(len(handlevideos))+' videos, details as below:\r\n'
 		for i in handlevideos:
-			num = AllFaces.objects.filter(picpath=i['snapshot_dir']).count()
-			rst_ctx = rst_ctx + i['file_fullpath'] +': ' + str(num) + ' valid face pics.\r\n'
+			num = AllFaces.objects.filter(videopath=i,snapint=interval_sec).count()
+			rst_ctx = rst_ctx + i +': ' + str(num) + ' valid face pics.\r\n'
 		rst_ctx += '\r\n'
 	
 	if newfaceset_num != 0 or updfaceset_num != 0:
@@ -105,12 +101,15 @@ def savepic(request):
 	
 	for res in ADT_result:
 		if not res['num'].isdigit():
-			rst_ctx = rst_ctx + 'No date time recognized for the video ' + res['path'] + '\r\n'
+			rst_ctx = rst_ctx + 'No date time recognized for the video ' + res['videopath'] + ' when snapshotted every '+ \
+			str(res['intsec'])+' seconds.\r\n'
+		else:
+			print res['videopath'],':', res['num']
 			
 	result_dict['data_info'] = rst_ctx
 	result_info = json.dumps(result_dict)
 	return HttpResponse(result_info,content_type="application/json")
-	
+
 def DetectFace(filepath,landmark,attrs):
 	face_dict={}
 	http_url='https://api-cn.faceplusplus.com/facepp/v3/detect'
@@ -147,7 +146,7 @@ def DetectFace(filepath,landmark,attrs):
 	try:
 		#req.add_header('Referer','http://remotserver.com/')
 		#post data to server
-		resp = urllib2.urlopen(req, timeout=20)
+		resp = urllib2.urlopen(req, timeout=30)
 		#get response
 		qrcont=resp.read()
 		face_dict = json.loads(qrcont)
@@ -155,6 +154,11 @@ def DetectFace(filepath,landmark,attrs):
 	except urllib2.HTTPError as e:
 		#print "test:::",e.read()
 		return e.read()
+	except urllib2.URLError as e:
+		if hasattr(e, 'reason'):
+			err_res = {}
+			err_res['error_message'] = str(e.reason)[0:200]
+			return err_res
 		
 def SearchFaceSet(facetoken,all_outer_id):
 	result = []
@@ -203,7 +207,7 @@ def SearchFaceSet(facetoken,all_outer_id):
 			try:
 				#req.add_header('Referer','http://remotserver.com/')
 				#post data to server
-				resp = urllib2.urlopen(req, timeout=10)
+				resp = urllib2.urlopen(req, timeout=30)
 				#get response
 				qrcont=resp.read()
 				qrcont = json.loads(qrcont)
@@ -217,6 +221,11 @@ def SearchFaceSet(facetoken,all_outer_id):
 					break
 	
 			except urllib2.HTTPError as e:
+				#print e.read()
+				result.append(newfaceset_num)
+				result.append(updfaceset_num)
+				return result
+			except urllib2.URLError as e:
 				#print e.read()
 				result.append(newfaceset_num)
 				result.append(updfaceset_num)
@@ -238,12 +247,13 @@ def SearchFaceSet(facetoken,all_outer_id):
 			new_outer_id = GenerateNewOuterId()
 			#在face++新建一个faceset
 			new_faceset = CreatFaceSet(facetoken,new_outer_id)
-			#同步本地faceset
-			Insert_FaceSet_db(new_faceset)
-			#更新facetable
-			Update_AllFaces_FaceSet_db(facetoken,new_faceset['outer_id'])
-			newfaceset_num += 1
-			#print 'New faceset:', new_faceset['outer_id'],'|',score
+			if new_faceset:
+				#同步本地faceset
+				Insert_FaceSet_db(new_faceset)
+				#更新facetable
+				Update_AllFaces_FaceSet_db(facetoken,new_faceset['outer_id'])
+				newfaceset_num += 1
+				#print 'New faceset:', new_faceset['outer_id'],'|',score
 	
 	result.append(newfaceset_num)
 	result.append(updfaceset_num)
@@ -277,7 +287,7 @@ def CreatFaceSet(facetoken,outer_id):
 	try:
 		#req.add_header('Referer','http://remotserver.com/')
 		#post data to server
-		resp = urllib2.urlopen(req, timeout=10)
+		resp = urllib2.urlopen(req, timeout=30)
 		#get response
 		qrcont=resp.read()
 		qrcont = json.loads(qrcont)
@@ -289,6 +299,8 @@ def CreatFaceSet(facetoken,outer_id):
 	except urllib2.HTTPError as e:
 	    #print e.read()
 	    return {}
+	except urllib2.URLError as e:
+		return {}
 	return result
 	    
 def AddFace(facetoken,outer_id):
@@ -319,7 +331,7 @@ def AddFace(facetoken,outer_id):
 	try:
 		#req.add_header('Referer','http://remotserver.com/')
 		#post data to server
-		resp = urllib2.urlopen(req, timeout=10)
+		resp = urllib2.urlopen(req, timeout=30)
 		#get response
 		qrcont=resp.read()
 		qrcont = json.loads(qrcont)
@@ -327,10 +339,11 @@ def AddFace(facetoken,outer_id):
 		result['face_count'] = qrcont['face_count']
 		result['outer_id'] = qrcont['outer_id']
 		result['face_tokens'] = facetoken
-
 	except urllib2.HTTPError as e:
 	    #print e.read()
 	    return {}
+	except urllib2.URLError as e:
+		return {}
 	return result
 	
 def Compare_2Faces(facetoken1,facetoken2):
@@ -361,7 +374,7 @@ def Compare_2Faces(facetoken1,facetoken2):
 	try:
 		#req.add_header('Referer','http://remotserver.com/')
 		#post data to server
-		resp = urllib2.urlopen(req, timeout=10)
+		resp = urllib2.urlopen(req, timeout=30)
 		#get response
 		qrcont=resp.read()
 		qrcont = json.loads(qrcont)
@@ -377,7 +390,7 @@ def savenewface(facesdata,save_path,save_name,snapseq,snapint,pictime):
 		newface = AllFaces()
 		newface.imageid = facesdata['image_id']
 		newface.facetoken = singleface['face_token']
-		newface.picpath = save_path
+		newface.videopath = save_path
 		newface.picname = save_name
 		newface.pictime = pictime
 		newface.snapseq = snapseq
@@ -424,7 +437,7 @@ def recognize_datetime(filepath):
 	try:
 		#req.add_header('Referer','http://remotserver.com/')
 		#post data to server
-		resp = urllib2.urlopen(req, timeout=10)
+		resp = urllib2.urlopen(req, timeout=30)
 		#get response
 		qrcont=resp.read()
 		face_dict = json.loads(qrcont)
@@ -434,65 +447,72 @@ def recognize_datetime(filepath):
 
 #def fixpic(request): call this directly from savepic
 def FixPic():
-	pic_time = None
-	global SCALE_LANDMARK,SCALE_ATTRS
-	needfix = ErrFaces.objects.filter(fixstatus='N').order_by('picpath')
-	save_pre_picpath = ''
-	
-	for fixdata in needfix:
-		if save_pre_picpath != fixdata.picpath:
-			face_data = DetectFace(fixdata.picpath,SCALE_LANDMARK,SCALE_ATTRS)
-			if face_data:
-				if 'error_message' in face_data:
-					pass
-				elif len(face_data['faces']) == 0:
-					'''not needed
-					errface = ErrFaces.objects.get(id=fixdata.id)
-					errface.errmsg = 'No faces detected'
-					errface.fixstatus = 'Y'
-					errface.save()
-					'''
-					pass
-				elif len(face_data['faces']) > 0:
-					pic_time = None
-					fix_path = ('\\').join(fixdata.picpath.split('\\')[:-1])
-					fix_name = fixdata.picpath.split('\\')[-1]
-					savenewface(face_data,fix_path,fix_name,fixdata.snapseq,fixdata.snapint,pic_time)
-					errface = ErrFaces.objects.get(id=fixdata.id)
-					errface.errmsg = 'Faces detected'
-					errface.fixstatus = 'Y'
-					errface.save()
-		else:
-			ErrFaces.objects.filter(id=fixdata.id).delete()
-		save_pre_picpath = fixdata.picpath
-		
+	try_limit = 20
+	try_count = 0
 	#check if there is still err pics to fix		
-	if ErrFaces.objects.filter(fixstatus='N').count() > 0:
-		return True
-	else:
-		return False
+	while ErrFaces.objects.filter(fixstatus='N').count() > 0 and try_count <= try_limit:
+		try_count += 1
+		pic_time = None
+		global SCALE_LANDMARK,SCALE_ATTRS
+		needfix = ErrFaces.objects.filter(fixstatus='N').order_by('picpath')
+		save_pre_picpath = ''
+		
+		for fixdata in needfix:
+			if save_pre_picpath != fixdata.picpath:
+				face_data = DetectFace(fixdata.picpath,SCALE_LANDMARK,SCALE_ATTRS)
+				if face_data:
+					if 'error_message' in face_data:
+						pass
+					elif len(face_data['faces']) == 0:
+						'''not needed
+						errface = ErrFaces.objects.get(id=fixdata.id)
+						errface.errmsg = 'No faces detected'
+						errface.fixstatus = 'Y'
+						errface.save()
+						'''
+						ErrFaces.objects.filter(id=fixdata.id).delete()
+						os.remove(fixdata.picpath)
+					elif len(face_data['faces']) > 0:
+						pic_time = None
+						fix_root = ('\\').join(fixdata.picpath.split('\\')[:-2])
+						fix_name = ('_').join(fixdata.picpath.split('\\')[-2].split('_')[2:])
+						fix_path = os.path.join(fix_root,fix_name)
+						pic_name = fixdata.picpath.split('\\')[-1]
+						savenewface(face_data,fix_path,pic_name,fixdata.snapseq,fixdata.snapint,pic_time)
+						errface = ErrFaces.objects.get(id=fixdata.id)
+						errface.fixmsg = 'Faces detected'
+						errface.fixstatus = 'Y'
+						errface.save()
+			else:
+				ErrFaces.objects.filter(id=fixdata.id).delete()
+			save_pre_picpath = fixdata.picpath
 	
 def AddDateTime():
 	#add time
 	ADT_result = []
-	fixtime_data = AllFaces.objects.filter(pictime__isnull=True).values('picpath').distinct()
+	fixtime_data = AllFaces.objects.filter(pictime__isnull=True).values('videopath').distinct()
 	for i in fixtime_data:
-		ADT_result.append(CalDateTime(i['picpath']))
+		ADT_result += CalDateTime(i['videopath'])
 	return ADT_result
 
 #def addtofaceset(request): call this directly from savepic
 def AddToFaceset():
-	data_add = AllFaces.objects.filter(faceset_status='N')
 	result = [0,0]
-	for face_add in data_add:
-		all_outer_id = GetOuterId()
-		facetoken = face_add.facetoken
-		searchresult = SearchFaceSet(facetoken,all_outer_id)
-		result[0] += searchresult[0]
-		result[1] += searchresult[1]
-
-	#result_info = str(result[0]) + ' new facesets are created; ' + str(result[1]) + ' facesets are updated!'
-	#return HttpResponse(result_info,content_type="text/plain")
+	try_limit = 20
+	try_count = 0
+	while AllFaces.objects.filter(faceset_status='N').count() > 0 and try_count <= try_limit:
+		try_count += 1
+		data_add = AllFaces.objects.filter(faceset_status='N')
+		for face_add in data_add:
+			all_outer_id = GetOuterId()
+			facetoken = face_add.facetoken
+			searchresult = SearchFaceSet(facetoken,all_outer_id)
+			result[0] += searchresult[0]
+			result[1] += searchresult[1]
+	
+		#result_info = str(result[0]) + ' new facesets are created; ' + str(result[1]) + ' facesets are updated!'
+		#return HttpResponse(result_info,content_type="text/plain")
+		
 	return result
 
 def GetOuterId():
@@ -572,45 +592,50 @@ def RegDateTime(filepath,type):
 	else:
 		return None
 	
-def CalDateTime(picpath):
+def CalDateTime(videopath):
 	fixtime_num = 0	
-	result = {}
-	needfix = AllFaces.objects.filter(pictime__isnull=True,picpath=picpath)
-	for fixdata in needfix:
-		getbase = AllFaces.objects.filter(pictime__isnull=False,picpath=picpath).order_by('snapseq')
-		if len(getbase) == 0:
-			break
+	result_list = []
+	#get different snapint
+	needfix_intsec = AllFaces.objects.filter(pictime__isnull=True,videopath=videopath).values('snapint').distinct()
+	for dataintsec in needfix_intsec:
+		result = {}
+		fixtime_base = {}
+		#get data which need to add datetime
+		needfix = AllFaces.objects.filter(pictime__isnull=True,videopath=videopath,snapint=dataintsec['snapint'])
+		for fixdata in needfix:
+			if not fixtime_base:
+				getbase = AllFaces.objects.filter(pictime__isnull=False,videopath=videopath,snapint=fixdata.snapint).order_by('snapseq')
+				if len(getbase) == 0:
+					break
+				else:
+					fixtime_base = getbase[0]
+			t = time.mktime(time.strptime(fixtime_base.pictime.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S"))
+			diffsec = 0.0
+			diffsec = (fixdata.snapseq - fixtime_base.snapseq) * int(fixdata.snapint)
+			t = t + diffsec
+			pic_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t))	
+			fixdata.pictime = pic_time
+			fixdata.save()
+			fixtime_num += 1
+			
+		result['videopath'] = videopath
+		result['intsec'] = dataintsec['snapint']
+		if fixtime_num == 0:
+			result['num'] = 'No valid datetime is recognized!'
 		else:
-			fixtime_base = getbase[0]
-		t = time.mktime(time.strptime(fixtime_base.pictime.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S"))
-		diffsec = 0.0
-		diffsec = (fixdata.snapseq - fixtime_base.snapseq) * int(fixdata.snapint)
-		t = t + diffsec
-		pic_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t))	
-		fixdata.pictime = pic_time
-		fixdata.save()
-		fixtime_num += 1
-		
-	result['path'] = picpath
-	if fixtime_num == 0:
-		result['num'] = 'No valid datetime is recognized!'
-	else:
-		result['num'] = str(fixtime_num)
-	return result
+			result['num'] = str(fixtime_num)
+		result_list.append(result)
+	return result_list
 	
 def HandleAllVideos(file_path,interval_sec):
 	videos_list = []
 	for root,dirs,files in os.walk(file_path):
 		for file in files:
-			videos_dict = {}
 			if CheckVideo(file):
-				snapshot_dir = os.path.join(root,'snapshots_') + file + '_' + str(interval_sec)
 				file_fullpath = os.path.join(root,file)
 				#print snapshot_dir
 				#print file_fullpath
-				videos_dict['snapshot_dir'] = snapshot_dir
-				videos_dict['file_fullpath'] = file_fullpath
-				videos_list.append(videos_dict)
+				videos_list.append(file_fullpath)
 				HandleSingleVideo(root,file,interval_sec)
 			else:
 				pass             
@@ -636,7 +661,7 @@ def HandleSingleVideo(root,f,interval_sec):
 		rval = False  
 		
 	#create snapshot folder
-	snapshot_dir = os.path.join(root,'snapshots_') + f + '_' + str(interval_sec)
+	snapshot_dir = os.path.join(root,'snapshots_') + str(interval_sec) + '_' + f
 	if rval and not os.path.exists(snapshot_dir):
 		os.makedirs(snapshot_dir)
 		
@@ -644,13 +669,13 @@ def HandleSingleVideo(root,f,interval_sec):
 	#print timeF
 	while rval and count <= framelimit:   #循环读取视频帧  
 		#print 'test'
+		base_flag = False
 		if count % timeF == 0:  #每隔timeF帧进行存储操作  
 			seqno = count / timeF
 			pic_name = str(count) + '.jpg'
 			img_path = os.path.join(snapshot_dir,pic_name)
 			cv2.imwrite(img_path,frame) #存储为图像  
 			if len(pictime_base) < 2:
-				#copyimage = cv2.imread(img_path)
 				img_hour = frame[80:134,760:838]
 				img_min = frame[80:134,855:933]
 				img_sec = frame[80:134,950:1028]
@@ -660,14 +685,15 @@ def HandleSingleVideo(root,f,interval_sec):
 				img_hour_path = os.path.join(snapshot_dir,img_hour_name)
 				img_min_path = os.path.join(snapshot_dir,img_min_name)
 				img_sec_path = os.path.join(snapshot_dir,img_sec_name)
-				cv2.imwrite(img_hour_path,img_hour) #存储为图像  
-				cv2.imwrite(img_min_path,img_min) #存储为图像  
-				cv2.imwrite(img_sec_path,img_sec) #存储为图像  
+				cv2.imwrite(img_hour_path,img_hour)   
+				cv2.imwrite(img_min_path,img_min)   
+				cv2.imwrite(img_sec_path,img_sec)   
 				pictime_hour = RegDateTime(img_hour_path, 'hour')
 				pictime_min = RegDateTime(img_min_path, 'min')
 				pictime_sec = RegDateTime(img_sec_path, 'sec')
 				#2018-05-16 13:53:51.401192
 				if pictime_hour != None and pictime_min != None and pictime_sec != None:
+					base_flag = True
 					pictime = '2018-04-01 ' + str(pictime_hour) + ':' + str(pictime_min) + ':' + str(pictime_sec)
 					base_dict = {}
 					base_dict['seqno'] = seqno
@@ -679,11 +705,11 @@ def HandleSingleVideo(root,f,interval_sec):
 					os.remove(img_hour_path)
 					os.remove(img_min_path)
 					os.remove(img_sec_path)
-					
+			
 			face_data = DetectFace(img_path,SCALE_LANDMARK,SCALE_ATTRS)
 			if face_data:
 				if 'error_message' in face_data:
-					face_data = json.loads(face_data)
+					#face_data = json.loads(face_data)
 					newerr = ErrFaces()
 					newerr.picpath = img_path
 					newerr.errmsg = face_data['error_message']
@@ -692,7 +718,8 @@ def HandleSingleVideo(root,f,interval_sec):
 					newerr.snapint = interval_sec
 					newerr.save()
 				elif len(face_data['faces']) == 0:
-					pass
+					if not base_flag:
+						os.remove(img_path)
 					'''not needed
 					newerr = ErrFaces()
 					newerr.picpath = img_path
@@ -710,7 +737,7 @@ def HandleSingleVideo(root,f,interval_sec):
 						pic_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t))
 					else:
 						pic_time = None
-					savenewface(face_data,snapshot_dir,pic_name,seqno,interval_sec,pic_time)
+					savenewface(face_data,fullfile,pic_name,seqno,interval_sec,pic_time)
 		count = count + timeF
 		if vc.set(1, count): #set 0-based index of the frame to be decoded/captured next.
 			rval, frame = vc.read()  

@@ -15,7 +15,8 @@ from django.contrib.postgres.fields import JSONField
 class AllFaces(models.Model):
     imageid = models.CharField(max_length=24,null=True)
     facetoken = models.CharField(max_length=32,unique=True,db_index=True)
-    picpath = models.CharField(max_length=200)
+    #picpath = models.CharField(max_length=200)
+    videopath = models.CharField(max_length=200)
     picname = models.CharField(max_length=40,null=True)
     pictime = models.DateTimeField(null=True)
     #pictime = models.CharField(max_length=20,null=True)
@@ -36,7 +37,8 @@ class AllFaces(models.Model):
     
 class ErrFaces(models.Model):
     picpath = models.CharField(max_length=100)
-    errmsg = models.CharField(max_length=60,null=True)
+    errmsg = models.CharField(max_length=200,null=True)
+    fixmsg = models.CharField(max_length=200,null=True)
     chstamp = models.DateTimeField(auto_now=True)
     fixstatus = models.CharField(max_length=1,null=True)
     snapint = models.IntegerField(null=True)
