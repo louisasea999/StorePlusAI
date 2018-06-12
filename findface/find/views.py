@@ -20,6 +20,7 @@ from find.models import AllFaces,ErrFaces,AllFaceSets
 from django.template.context_processors import request
 from PIL import Image,ImageEnhance
 import pytesseract
+from django.contrib.messages.api import warning
 
 socket.setdefaulttimeout(20.0) 
 
@@ -55,6 +56,7 @@ def savepic(request):
 	result_dict = {}
 	rst_ctx = ''
 	handlevideos = []
+	warningvideos = []
 	validfacepic_num = 0
 	newfaceset_num = 0
 	updfaceset_num = 0
@@ -64,12 +66,14 @@ def savepic(request):
 	
 	#process every videos in folder or only single one video
 	if os.path.isdir(file_path):
-		handlevideos = HandleAllVideos(file_path,interval_sec)
+		handlevideos,warningvideos = HandleAllVideos(file_path,interval_sec)
 	elif os.path.isfile(file_path):
 		f = file_path.split('\\')[-1]
 		root = ('\\').join(file_path.split('\\')[0:-1]) 
 		if CheckVideo(f):	
-			HandleSingleVideo(root,f,interval_sec)
+			wv = HandleSingleVideo(root,f,interval_sec)
+			if wv:
+				warningvideos.append(wv)
 			handlevideos.append(file_path)
 
 	#Fix error pics
@@ -92,7 +96,7 @@ def savepic(request):
 			rst_ctx = 'Analyzed '+str(len(handlevideos))+' videos, details as below:\r\n'
 		for i in handlevideos:
 			num = AllFaces.objects.filter(videopath=i,snapint=interval_sec).count()
-			rst_ctx = rst_ctx + i +': ' + str(num) + ' valid face pics.\r\n'
+			rst_ctx = rst_ctx + i +': detected ' + str(num) + ' faces.\r\n'
 		rst_ctx += '\r\n'
 	
 	if newfaceset_num != 0 or updfaceset_num != 0:
@@ -105,6 +109,12 @@ def savepic(request):
 			str(res['intsec'])+' seconds.\r\n'
 		else:
 			print res['videopath'],':', res['num']
+	rst_ctx += '\r\n'
+	
+	if len(warningvideos) > 0:
+		rst_ctx += 'WARNING\r\nBelow videos probably have a wrong detected time, please check\r\n'
+		for w in warningvideos:
+			rst_ctx = rst_ctx + w + '\r\n'
 			
 	result_dict['data_info'] = rst_ctx
 	result_info = json.dumps(result_dict)
@@ -153,7 +163,8 @@ def DetectFace(filepath,landmark,attrs):
 		return face_dict
 	except urllib2.HTTPError as e:
 		#print "test:::",e.read()
-		return e.read()
+		err_res = json.loads(e.read())
+		return err_res
 	except urllib2.URLError as e:
 		if hasattr(e, 'reason'):
 			err_res = {}
@@ -211,13 +222,14 @@ def SearchFaceSet(facetoken,all_outer_id):
 				#get response
 				qrcont=resp.read()
 				qrcont = json.loads(qrcont)
+				#print qrcont
 				if 'results' in qrcont:
 					if qrcont['results'][0]['confidence'] > score:
 						score = qrcont['results'][0]['confidence']
 						max_outer_id = outer_id
 						max_facetoken = qrcont['results'][0]['face_token']
 	
-				if score > 85:    #分数大于85直接认定为本人 防止运行太频繁造成QPS爆掉
+				if score > 90:    #分数大于90直接认定为本人 防止运行太频繁造成QPS爆掉
 					break
 	
 			except urllib2.HTTPError as e:
@@ -230,7 +242,8 @@ def SearchFaceSet(facetoken,all_outer_id):
 				result.append(newfaceset_num)
 				result.append(updfaceset_num)
 				return result
-		if score != 0 and score > 65:
+			
+		if score != 0 and score > 80:
 			#我觉得没必要再compare，这里的分数跟上面search的最优分数应该是一致的(经测试，是一样的）。主要来确定这个score多少分合适
 			#comp_result = Compare_2Faces(facetoken,max_facetoken)
 			#comp_score = comp_result['confidence']
@@ -242,7 +255,7 @@ def SearchFaceSet(facetoken,all_outer_id):
 				#更新facetable
 				Update_AllFaces_FaceSet_db(facetoken,max_outer_id)
 				updfaceset_num += 1
-				#print 'Add to faceset:', max_outer_id,'|',score
+				#print 'Add faceset:', max_outer_id,'|',score
 		else:
 			new_outer_id = GenerateNewOuterId()
 			#在face++新建一个faceset
@@ -398,12 +411,20 @@ def savenewface(facesdata,save_path,save_name,snapseq,snapint,pictime):
 		attrs = singleface['attributes']
 		newface.gender = attrs['gender']['value']
 		newface.age = attrs['age']['value']
+		newface.smile = attrs['smile']
+		newface.headpose = attrs['headpose']
+		newface.blur = attrs['blur']
 		newface.eyestatus = attrs['eyestatus']
 		newface.emotion = attrs['emotion']
+		newface.facequality = attrs['facequality']
 		newface.ethnicity = attrs['ethnicity']['value']
 		newface.male_score = attrs['beauty']['male_score']
 		newface.female_score = attrs['beauty']['female_score']
+		newface.mouthstatus = attrs['mouthstatus']
+		newface.eyegaze = attrs['eyegaze']
 		newface.skinstatus = attrs['skinstatus']
+		newface.mostlike_score = (newface.blur['blurness']['threshold'] - newface.blur['blurness']['value']) * 0.5 + \
+								(newface.facequality['value'] - newface.facequality['threshold']) * 0.5
 		newface.save()
 
 
@@ -471,7 +492,8 @@ def FixPic():
 						errface.save()
 						'''
 						ErrFaces.objects.filter(id=fixdata.id).delete()
-						os.remove(fixdata.picpath)
+						if not os.path.exists(os.path.splitext(fixdata.picpath)[0]+'_hour'+os.path.splitext(fixdata.picpath)[1]):
+							os.remove(fixdata.picpath)
 					elif len(face_data['faces']) > 0:
 						pic_time = None
 						fix_root = ('\\').join(fixdata.picpath.split('\\')[:-2])
@@ -629,6 +651,7 @@ def CalDateTime(videopath):
 	
 def HandleAllVideos(file_path,interval_sec):
 	videos_list = []
+	warning_list = []
 	for root,dirs,files in os.walk(file_path):
 		for file in files:
 			if CheckVideo(file):
@@ -636,12 +659,16 @@ def HandleAllVideos(file_path,interval_sec):
 				#print snapshot_dir
 				#print file_fullpath
 				videos_list.append(file_fullpath)
-				HandleSingleVideo(root,file,interval_sec)
+				res = HandleSingleVideo(root,file,interval_sec)
+				if res:
+					warning_list.append(res)
 			else:
 				pass             
 		for dir in dirs:
-			videos_list += HandleAllVideos(dir,interval_sec)
-	return videos_list
+			v,w = HandleAllVideos(dir,interval_sec)
+			videos_list += v
+			warning_list += w
+	return videos_list,warning_list
 
 def HandleSingleVideo(root,f,interval_sec):
 	global SCALE_LANDMARK,SCALE_ATTRSs
@@ -709,9 +736,9 @@ def HandleSingleVideo(root,f,interval_sec):
 			face_data = DetectFace(img_path,SCALE_LANDMARK,SCALE_ATTRS)
 			if face_data:
 				if 'error_message' in face_data:
-					#face_data = json.loads(face_data)
 					newerr = ErrFaces()
 					newerr.picpath = img_path
+					#print face_data
 					newerr.errmsg = face_data['error_message']
 					newerr.fixstatus = 'N'
 					newerr.snapseq = str(seqno)
@@ -747,6 +774,18 @@ def HandleSingleVideo(root,f,interval_sec):
 			
 	vc.release()  
 	print pictime_base
+	
+	#verify the time
+	if len(pictime_base) == 2:
+		t0 = time.mktime(time.strptime(pictime_base[0]['time'], "%Y-%m-%d %H:%M:%S"))
+		t1 = time.mktime(time.strptime(pictime_base[1]['time'], "%Y-%m-%d %H:%M:%S"))
+		reg_diff = t1 - t0
+		exp_diff = (pictime_base[1]['seqno'] - pictime_base[0]['seqno']) * int(interval_sec)
+		if abs(exp_diff - reg_diff) <= 2:
+			return None
+		else:
+			return fullfile
+			
 
 def CheckVideo(f):
 	if f.split('.')[-1] not in SUPPORTED_FORMATS:
