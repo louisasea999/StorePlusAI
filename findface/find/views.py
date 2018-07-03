@@ -17,10 +17,10 @@ from django.http import HttpResponseRedirect
 from find.models import AllFaces,ErrFaces,AllFaceSets
 #from findface.settings import STATIC_URL
 #from json.decoder import errmsg
-from django.template.context_processors import request
+#from django.template.context_processors import request
 from PIL import Image,ImageEnhance
 import pytesseract
-from django.contrib.messages.api import warning
+#from django.contrib.messages.api import warning
 
 socket.setdefaulttimeout(20.0) 
 
