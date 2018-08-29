@@ -1,0 +1,1 @@
+activate funface&&python C:\Users\hanmi\eclipse-workspace\findface\scripts\conv.py

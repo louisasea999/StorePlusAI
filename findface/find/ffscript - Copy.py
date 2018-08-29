@@ -3,14 +3,13 @@
 import urllib2
 import urllib
 import socket
-import sys,json,os,re,time,string,random,math,shutil
+import sys,json,os,re,time,string,random
 import cv2
 from PIL import Image,ImageEnhance
 import pytesseract
 import numpy as np
 
 import django
-from __builtin__ import file
 pathname = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, pathname)
 sys.path.insert(0, os.path.abspath(os.path.join(pathname, '..')))
@@ -41,55 +40,77 @@ secret_list.append(secret_concurrency)
 SCALE_LANDMARK = '0'
 SCALE_ATTRS = 'gender,age,smiling,headpose,facequality,blur,eyestatus,emotion,ethnicity,beauty,mouthstatus,eyegaze,skinstatus'
 SUPPORTED_FORMATS = ['mp4','m4v','mkv','webm','mov','avi','wmv','mpg','flv',]
-f = None
-video_results_dir = ''
 
 def savepic(file_path,interval_sec):
-    global f,video_results_dir
-    f = None
     rst_ctx = ''
-    
-    new_time = time.strftime('%Y%m%d%H%M%S')
-    logpath = os.path.join(os.getcwd(),'log')
-    if not os.path.exists(logpath):
-        os.mkdir(logpath)
-    resultfile = os.path.join(logpath,new_time+'.log')
-    f = open(resultfile,'a+')
-    rst_ctx = 'The analysis results are as follows:\r\n'
-    f.write('%s' % rst_ctx)
+    handlevideos = []
+    warningvideos = []
+    validfacepic_num = 0
+    newfaceset_num = 0
+    updfaceset_num = 0
     
     #process every videos in folder or only single one video
     if os.path.isdir(file_path):
-        video_results_dir = file_path + '_results'
-        video_conv_dir = file_path + '_conv'
-        HandleAllVideos(video_conv_dir,interval_sec)
-        CleanFiles(file_path)
+        handlevideos,warningvideos = HandleAllVideos(file_path,interval_sec)
     elif os.path.isfile(file_path):
-        fv = file_path.split('\\')[-1]
+        f = file_path.split('\\')[-1]
         root = ('\\').join(file_path.split('\\')[0:-1]) 
-        video_results_dir = root + '_results'
-        if CheckVideo(fv):    
-            HandleSingleVideo(root,fv,interval_sec)
-            CleanFiles(root)
+        if CheckVideo(f):    
+            wv = HandleSingleVideo(root,f,interval_sec)
+            if wv:
+                warningvideos.append(wv)
+            handlevideos.append(file_path)
     else:
         print 'Please input a valid video path or directory'
         sys.exit()
 
     #Fix error pics
-    #FixPic()
+    FixPic()
         
     #Add time
-    #ADT_result = AddDateTime()
+    ADT_result = AddDateTime()
 
     #Add to faceset
-    #ATF_result = [0,0]
-    #ATF_result = AddToFaceset(videopath='')
-    #newfaceset_num = ATF_result[0] 
-    #updfaceset_num = ATF_result[1]
-    AddToFaceset(videopath='')
+    ATF_result = [0,0]
+    ATF_result = AddToFaceset()
+    newfaceset_num = ATF_result[0] 
+    updfaceset_num = ATF_result[1]
     
-    rst_ctx = '*'*100+'\r\n\r\nNotes:\r\n1. Source videos are moved to the directory \'FILEPATH_resluts\' after analysis done.\r\n'
-    rst_ctx = rst_ctx+ '2. Snapshots are stored in directory \'FILEPATH_resluts\' for certain days, please check if needed.\r\n'
+    #output result to web
+    if len(handlevideos) > 0:
+        if len(handlevideos) == 1:
+            rst_ctx = 'Analyzed 1 video, details as below:\r\n'
+        if len(handlevideos) > 1:
+            rst_ctx = 'Analyzed '+str(len(handlevideos))+' videos, details as below:\r\n'
+        for i in handlevideos:
+            num = AllFaces.objects.filter(videopath=i,snapint=interval_sec).count()
+            rst_ctx = rst_ctx + i +': detected ' + str(num) + ' faces.\r\n'
+        rst_ctx += '\r\n'
+    
+    if newfaceset_num != 0 or updfaceset_num != 0:
+        rst_ctx = rst_ctx+'Created '+str(newfaceset_num)+' facesets.\r\n' + 'Updated '+str(updfaceset_num)+' facesets.\r\n'
+        rst_ctx += '\r\n'
+    
+    for res in ADT_result:
+        if not res['num'].isdigit():
+            rst_ctx = rst_ctx + 'No date time recognized for the video ' + res['videopath'] + ' when snapshotted every '+ \
+            str(res['intsec'])+' seconds.\r\n'
+        else:
+            print res['videopath'],':', res['num']
+    rst_ctx += '\r\n'
+    
+    if len(warningvideos) > 0:
+        rst_ctx += 'WARNING\r\nBelow videos probably have a wrong detected time, please check\r\n'
+        for w in warningvideos:
+            rst_ctx = rst_ctx + w + '\r\n'
+          
+    #print rst_ctx
+    new_time = time.strftime('%Y%m%d%H%M%S')
+    logpath = os.path.join(os.getcwd(),'log')
+    if not os.path.exists(logpath):
+        os.mkdir(logpath)
+    resultfile = os.path.join(logpath,new_time+'.log')
+    f = open(resultfile,'w')
     f.write('%s' % rst_ctx)
     f.flush()
     f.close()
@@ -130,7 +151,7 @@ def DetectFace(filepath,landmark,attrs):
     try:
         #req.add_header('Referer','http://remotserver.com/')
         #post data to server
-        resp = urllib2.urlopen(req, timeout=6)
+        resp = urllib2.urlopen(req, timeout=30)
         #get response
         qrcont=resp.read()
         face_dict = json.loads(qrcont)
@@ -144,10 +165,6 @@ def DetectFace(filepath,landmark,attrs):
             err_res = {}
             err_res['error_message'] = str(e.reason)[0:200]
             return err_res
-    except:
-        err_res = {}
-        err_res['error_message'] = 'Error in DetectFace()'
-        return err_res
 
 def DetectFaceFrame(frame_encode,landmark,attrs):
     face_dict={}
@@ -182,7 +199,7 @@ def DetectFaceFrame(frame_encode,landmark,attrs):
     try:
         #req.add_header('Referer','http://remotserver.com/')
         #post data to server
-        resp = urllib2.urlopen(req, timeout=6)
+        resp = urllib2.urlopen(req, timeout=30)
         #get response
         qrcont=resp.read()
         face_dict = json.loads(qrcont)
@@ -196,10 +213,6 @@ def DetectFaceFrame(frame_encode,landmark,attrs):
             err_res = {}
             err_res['error_message'] = str(e.reason)[0:200]
             return err_res
-    except:
-        err_res = {}
-        err_res['error_message'] = 'Error in DetectFaceFrame()'
-        return err_res
         
 def SearchFaceSet(facetoken,all_outer_id):
     result = []
@@ -248,7 +261,7 @@ def SearchFaceSet(facetoken,all_outer_id):
             try:
                 #req.add_header('Referer','http://remotserver.com/')
                 #post data to server
-                resp = urllib2.urlopen(req, timeout=6)
+                resp = urllib2.urlopen(req, timeout=30)
                 #get response
                 qrcont=resp.read()
                 qrcont = json.loads(qrcont)
@@ -269,10 +282,6 @@ def SearchFaceSet(facetoken,all_outer_id):
                 return result
             except urllib2.URLError as e:
                 #print e.read()
-                result.append(newfaceset_num)
-                result.append(updfaceset_num)
-                return result
-            except:
                 result.append(newfaceset_num)
                 result.append(updfaceset_num)
                 return result
@@ -344,7 +353,7 @@ def CreatFaceSet(facetoken,outer_id):
     try:
         #req.add_header('Referer','http://remotserver.com/')
         #post data to server
-        resp = urllib2.urlopen(req, timeout=6)
+        resp = urllib2.urlopen(req, timeout=30)
         #get response
         qrcont=resp.read()
         qrcont = json.loads(qrcont)
@@ -357,8 +366,6 @@ def CreatFaceSet(facetoken,outer_id):
         #print e.read()
         return {}
     except urllib2.URLError as e:
-        return {}
-    except:
         return {}
     return result
         
@@ -390,7 +397,7 @@ def AddFace(facetoken,outer_id):
     try:
         #req.add_header('Referer','http://remotserver.com/')
         #post data to server
-        resp = urllib2.urlopen(req, timeout=6)
+        resp = urllib2.urlopen(req, timeout=30)
         #get response
         qrcont=resp.read()
         qrcont = json.loads(qrcont)
@@ -402,8 +409,6 @@ def AddFace(facetoken,outer_id):
         #print e.read()
         return {}
     except urllib2.URLError as e:
-        return {}
-    except:
         return {}
     return result
     
@@ -435,7 +440,7 @@ def Compare_2Faces(facetoken1,facetoken2):
     try:
         #req.add_header('Referer','http://remotserver.com/')
         #post data to server
-        resp = urllib2.urlopen(req, timeout=6)
+        resp = urllib2.urlopen(req, timeout=30)
         #get response
         qrcont=resp.read()
         qrcont = json.loads(qrcont)
@@ -443,8 +448,6 @@ def Compare_2Faces(facetoken1,facetoken2):
 
     except urllib2.HTTPError as e:
         #print e.read()
-        pass
-    except:
         pass
     return result
 
@@ -508,20 +511,17 @@ def recognize_datetime(filepath):
     try:
         #req.add_header('Referer','http://remotserver.com/')
         #post data to server
-        resp = urllib2.urlopen(req, timeout=6)
+        resp = urllib2.urlopen(req, timeout=30)
         #get response
         qrcont=resp.read()
         face_dict = json.loads(qrcont)
         return face_dict
     except urllib2.HTTPError as e:
         return e.read()
-    except:
-        pass
-        
 
 #def fixpic(request): call this directly from savepic
 def FixPic():
-    try_limit = 10
+    try_limit = 20
     try_count = 0
     #check if there is still err pics to fix        
     while ErrFaces.objects.filter(fixstatus='N').count() > 0 and try_count <= try_limit:
@@ -571,26 +571,19 @@ def AddDateTime():
     return ADT_result
 
 #def addtofaceset(request): call this directly from savepic
-def AddToFaceset(videopath):
+def AddToFaceset():
     result = [0,0]
-    try_limit = 5
+    try_limit = 20
     try_count = 0
-    while try_count <= try_limit:
+    while AllFaces.objects.filter(faceset_status='N').count() > 0 and try_count <= try_limit:
         try_count += 1
-        #print videopath,': ', try_count, 'time'
-        if videopath == '':
-            data_add = AllFaces.objects.filter(faceset_status='N')
-        else:
-            data_add = AllFaces.objects.filter(faceset_status='N',videopath=videopath)
-        if data_add:
-            for face_add in data_add:
-                all_outer_id = GetOuterId()
-                facetoken = face_add.facetoken
-                searchresult = SearchFaceSet(facetoken,all_outer_id)
-                result[0] += searchresult[0]
-                result[1] += searchresult[1]
-        else:
-            break
+        data_add = AllFaces.objects.filter(faceset_status='N')
+        for face_add in data_add:
+            all_outer_id = GetOuterId()
+            facetoken = face_add.facetoken
+            searchresult = SearchFaceSet(facetoken,all_outer_id)
+            result[0] += searchresult[0]
+            result[1] += searchresult[1]
         
     return result
 
@@ -705,27 +698,33 @@ def CalDateTime(videopath):
     return result_list
     
 def HandleAllVideos(file_path,interval_sec):
+    videos_list = []
+    warning_list = []
     for root,dirs,files in os.walk(file_path):
         for file in files:
             if CheckVideo(file):
                 file_fullpath = os.path.join(root,file)
                 #print snapshot_dir
                 #print file_fullpath
-                HandleSingleVideo(root,file,interval_sec)
+                videos_list.append(file_fullpath)
+                res = HandleSingleVideo(root,file,interval_sec)
+                if res:
+                    warning_list.append(res)
             else:
                 pass             
         for dir in dirs:
-            HandleAllVideos(dir,interval_sec)
+            v,w = HandleAllVideos(dir,interval_sec)
+            videos_list += v
+            warning_list += w
+    return videos_list,warning_list
 
-def HandleSingleVideo(root,fv,interval_sec):
-    global SCALE_LANDMARK,SCALE_ATTRSs,f,video_results_dir
-    time_start = time.time()
-    rst_txt = ''
+def HandleSingleVideo(root,f,interval_sec):
+    global SCALE_LANDMARK,SCALE_ATTRSs
     pictime_base = []
     seqno = int(0)
     count = int(0)
     timeF = int(0)
-    fullfile = os.path.join(root,fv)
+    fullfile = os.path.join(root,f)
     vc = cv2.VideoCapture(fullfile) #读入视频文件  
     framerate = int(vc.get(5))  #Get video frame rate
     framelimit = int(vc.get(7))
@@ -738,8 +737,7 @@ def HandleSingleVideo(root,fv,interval_sec):
         rval = False  
         
     #create snapshot folder
-    #snapshot_dir = os.path.join(root,'snapshots_') + str(interval_sec) + '_' + fv
-    snapshot_dir = os.path.join(video_results_dir,'snapshots_') + str(interval_sec) + '_' + fv
+    snapshot_dir = os.path.join(root,'snapshots_') + str(interval_sec) + '_' + f
     if rval and not os.path.exists(snapshot_dir):
         os.makedirs(snapshot_dir)
        
@@ -829,101 +827,37 @@ def HandleSingleVideo(root,fv,interval_sec):
             cv2.waitKey(1)  
         else:
             rval = False
+            
     vc.release()  
+    print pictime_base
     
-    #Fix error pics
-    FixPic()
-    
-    rst_txt = '*'*100 + '\r\n'
-    rst_txt = rst_txt + fv +', analyzed every ' + str(interval_sec) + ' seconds:\r\n'    
-    face_num = AllFaces.objects.filter(videopath=fullfile,snapint=interval_sec).count()
-    #Add to faceset and output the result
-    ATF_result = [0,0]
-    ATF_result = AddToFaceset(fullfile)
-    newfaceset_num = ATF_result[0] 
-    updfaceset_num = ATF_result[1]
-    rst_txt = rst_txt+'Detected '+str(face_num)+' faces, created '+str(newfaceset_num)+' facesets, updated '+str(updfaceset_num)+' facesets.\r\n'
-    f.write(rst_txt)
-    f.flush()
-    
-    #output Recognized time
-    if len(pictime_base) > 0:
-        rst_txt = 'Recognized time: '
-        for i in pictime_base:
-            rst_txt = rst_txt + 'SeqNo. '+str(i['seqno'])+', '+i['time']+'; '
-        rst_txt = rst_txt + '\r\n'
-        f.write(rst_txt)
-        f.flush()
-    
-    #verify the time and output result
+    #verify the time
     if len(pictime_base) == 2:
         t0 = time.mktime(time.strptime(pictime_base[0]['time'], "%Y-%m-%d %H:%M:%S"))
         t1 = time.mktime(time.strptime(pictime_base[1]['time'], "%Y-%m-%d %H:%M:%S"))
         reg_diff = t1 - t0
         exp_diff = (pictime_base[1]['seqno'] - pictime_base[0]['seqno']) * int(interval_sec)
         if abs(exp_diff - reg_diff) <= 2:
-            pass
+            return None
         else:
-            rst_txt = 'Probably have a wrong detected time, please check!\r\n'
-            f.write(rst_txt)
-            f.flush()
-    
-    #Add datetime and output the result
-    CDT_result = CalDateTime(fullfile)
-    for res in CDT_result:
-        if not res['num'].isdigit():
-            rst_txt = 'No date time recognized, when analyzed every '+str(res['intsec'])+' seconds, please check!\r\n'
-            f.write(rst_txt)
-            f.flush()
-        
-    time_end = time.time()
-    cost_time = ChangeTime(time_end-time_start)
-    rst_txt = 'Cost ' + cost_time +'.\r\n'
-    f.write(rst_txt)
-    f.flush()
-    shutil.move(fullfile,video_results_dir)
+            return fullfile
             
+
 def CheckVideo(f):
     if f.split('.')[-1] not in SUPPORTED_FORMATS:
         return False
     else:
         return True
     
-def ChangeTime(allTime):
-    day = 24*60*60
-    hour = 60*60
-    min = 60
-    if allTime <60:        
-        return  "%d secs"%math.ceil(allTime)
-    elif  allTime > day:
-        days = divmod(allTime,day) 
-        return "%d days, %s"%(int(days[0]),ChangeTime(days[1]))
-    elif allTime > hour:
-        hours = divmod(allTime,hour)
-        return '%d hours, %s'%(int(hours[0]),ChangeTime(hours[1]))
-    else:
-        mins = divmod(allTime,min)
-        return "%d mins, %d sec"%(int(mins[0]),math.ceil(mins[1]))
-    
-def CleanFiles(path):
-    #CLean empty folders under param path           
-    for root,dirs,files in os.walk(path,False):
-        for dir in dirs:
-            tempdir = os.path.join(root,dir)
-            if not os.listdir(tempdir):
-                os.rmdir(tempdir)
-            else:
-                CleanFiles(tempdir)
-                
 if __name__ == '__main__': 
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 1:
+        filepath = ''
+        intsec = 1
+        savepic(filepath,intsec)
+    elif len(sys.argv) == 3:
         filepath = sys.argv[1]
         intsec = sys.argv[2]
-        if os.path.split(filepath)[1] == '':
-            print "Please specify a video folder, not just a disk driver."
-            sys.exit()
-        else:
-            savepic(filepath,intsec)
+        savepic(filepath,intsec)
     else:
-        print "Only accept 2 parameters:\'FILEPATH INETERVALSECOND\' "
+        print "Only accpect 0 parameter, and 2 parameters:\'FILEPATH INETERVALSECOND\' "
         sys.exit()

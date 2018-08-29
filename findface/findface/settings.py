@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/1.11/ref/settings/
 """
 
 import os
-from django.conf.global_settings import MIDDLEWARE_CLASSES
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,7 +26,8 @@ SECRET_KEY = 'z^83=3f5r%k%2o&c$dy6#*iwvf*iyqhl$i0w%k5^bln@8*%n*b'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '*']
+#ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -85,14 +85,19 @@ DATABASES = {
     #    'ENGINE': 'django.db.backends.sqlite3',
     #    'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     #}
+
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': 'facesdb',#数据库名称
+        #'NAME': 'spsdata',#数据库名称
         'USER':'postgres',#拥有者，这个一般没修改
+        #'USER':'sps',#拥有者，这个一般没修改
         'PASSWORD':'123456',#密码，自己设定的
         'HOST':'localhost',#默认的就没写
+        #'HOST':'104.215.84.17',#默认的就没写
         'PORT':'5432',
     }
+
 }
 
 
