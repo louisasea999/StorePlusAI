@@ -2,7 +2,7 @@
 
 import os,shutil,time,math,sys
 
-VIDEOPATH = r'C:\Users\hanmi\eclipse-workspace\fileforfindface'
+VIDEOPATH = r'C:\myworkshop\fileforfindface'
 SUPPORTED_FORMATS = ['mp4','m4v','mkv','webm','mov','avi','wmv','mpg','flv',]
 
 def conv(path):

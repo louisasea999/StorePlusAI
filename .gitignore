@@ -1,0 +1,5 @@
+
+*.pyc
+*.log
+*.pydevproject
+findface/.settings/org.eclipse.core.resources.prefs

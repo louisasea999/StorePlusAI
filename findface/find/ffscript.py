@@ -919,6 +919,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         filepath = sys.argv[1]
         intsec = sys.argv[2]
+        print filepath,intsec
         if os.path.split(filepath)[1] == '':
             print "Please specify a video folder, not just a disk driver."
             sys.exit()
