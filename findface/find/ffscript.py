@@ -10,7 +10,8 @@ import pytesseract
 import numpy as np
 
 import django
-from __builtin__ import file
+from django.conf import settings as st
+#from __builtin__ import file
 pathname = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, pathname)
 sys.path.insert(0, os.path.abspath(os.path.join(pathname, '..')))
@@ -23,9 +24,9 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 # Create your views here.
 
-key = "cY2YOwFKwF_c9yu4nnBruTgBvjT_9Tb1"
-secret = "iMMYMgYt2cJu25-skaf0oOiRnZpum9rX"
-
+key = st.KEY
+secret = st.SECRET
+'''
 key_concurrency = "cY2YOwFKwF_c9yu4nnBruTgBvjT_9Tb1"
 secret_concurrency = "iMMYMgYt2cJu25-skaf0oOiRnZpum9rX"
 
@@ -37,10 +38,10 @@ key_list.append(key_concurrency)
 
 secret_list.append(secret)
 secret_list.append(secret_concurrency)
-
-SCALE_LANDMARK = '0'
-SCALE_ATTRS = 'gender,age,smiling,headpose,facequality,blur,eyestatus,emotion,ethnicity,beauty,mouthstatus,eyegaze,skinstatus'
-SUPPORTED_FORMATS = ['mp4','m4v','mkv','webm','mov','avi','wmv','mpg','flv',]
+'''
+SCALE_LANDMARK = st.SCALE_LANDMARK
+SCALE_ATTRS = st.SCALE_ATTRS
+SUPPORTED_FORMATS = st.SUPPORTED_FORMATS
 f = None
 video_results_dir = ''
 
@@ -50,7 +51,8 @@ def savepic(file_path,interval_sec):
     rst_ctx = ''
     
     new_time = time.strftime('%Y%m%d%H%M%S')
-    logpath = os.path.join(os.getcwd(),'log')
+    #logpath = os.path.join(os.getcwd(),'log')
+    logpath = st.LOG_DIR
     if not os.path.exists(logpath):
         os.mkdir(logpath)
     resultfile = os.path.join(logpath,new_time+'.log')
@@ -527,7 +529,7 @@ def FixPic():
     while ErrFaces.objects.filter(fixstatus='N').count() > 0 and try_count <= try_limit:
         try_count += 1
         pic_time = None
-        global SCALE_LANDMARK,SCALE_ATTRS
+        #global SCALE_LANDMARK,SCALE_ATTRS
         needfix = ErrFaces.objects.filter(fixstatus='N').order_by('picpath')
         save_pre_picpath = ''
         
@@ -718,7 +720,8 @@ def HandleAllVideos(file_path,interval_sec):
             HandleAllVideos(dir,interval_sec)
 
 def HandleSingleVideo(root,fv,interval_sec):
-    global SCALE_LANDMARK,SCALE_ATTRSs,f,video_results_dir
+    #global SCALE_LANDMARK,SCALE_ATTRSs,f,video_results_dir
+    global f,video_results_dir
     time_start = time.time()
     rst_txt = ''
     pictime_base = []
@@ -919,7 +922,6 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         filepath = sys.argv[1]
         intsec = sys.argv[2]
-        print filepath,intsec
         if os.path.split(filepath)[1] == '':
             print "Please specify a video folder, not just a disk driver."
             sys.exit()

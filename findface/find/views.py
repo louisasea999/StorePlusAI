@@ -671,7 +671,7 @@ def HandleAllVideos(file_path,interval_sec):
 	return videos_list,warning_list
 
 def HandleSingleVideo(root,f,interval_sec):
-	global SCALE_LANDMARK,SCALE_ATTRSs
+	global SCALE_LANDMARK,SCALE_ATTRS
 	pictime_base = []
 	seqno = 0
 	count = 0

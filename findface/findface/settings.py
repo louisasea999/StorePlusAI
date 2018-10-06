@@ -139,3 +139,14 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/1.11/howto/static-files/
 
 STATIC_URL = '/static/'
+
+
+#custom defination
+#used by face++
+SCALE_LANDMARK = '0'
+SCALE_ATTRS = 'gender,age,smiling,headpose,facequality,blur,eyestatus,emotion,ethnicity,beauty,mouthstatus,eyegaze,skinstatus'
+KEY = "cY2YOwFKwF_c9yu4nnBruTgBvjT_9Tb1"
+SECRET = "iMMYMgYt2cJu25-skaf0oOiRnZpum9rX"
+
+SUPPORTED_FORMATS = ['mp4','m4v','mkv','webm','mov','avi','wmv','mpg','flv',]
+LOG_DIR = 'C:\log'
