@@ -57,4 +57,18 @@ class AllFaceSets(models.Model):
     face_count = models.IntegerField(null=True)
     outer_id = models.CharField(max_length=255,unique=True)
 
+class GuestHist(models.Model):
+    outer_id = models.CharField(max_length=255,null=False)
+    visit_time = models.DateTimeField(null=False)
+    class Meta:
+        unique_together=("outer_id","visit_time")
+        
+class GuestFace(models.Model):
+    outer_id = models.CharField(max_length=255,null=False,primary_key=True)
+    gender = models.CharField(max_length=6,null=True)
+    age = models.IntegerField(null=True)
+    ethnicity = models.CharField(max_length=5,null=True)
+    regdate = models.DateTimeField(null=True,auto_now_add=True)
+    chstamp = models.DateTimeField(null=True,auto_now=True)
+    
     

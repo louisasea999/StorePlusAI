@@ -3,3 +3,5 @@
 *.log
 *.pydevproject
 findface/.settings/org.eclipse.core.resources.prefs
+findface/.pydevproject
+findface/find/migrations/*.py
