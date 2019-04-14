@@ -1,0 +1,149 @@
+<!DOCTYPE html>  
+<head>  
+    <title>FindFace</title>  
+	 <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <script type="text/javascript" src="/static/jquery-3.2.1.min.js"></script>
+</head>  
+<body>
+
+<p>选择要分析的视频：
+<input type="file" id="file" onchange="onInputFileChange()" accept='video/*'> 
+</p>
+<div id="div1" hidden>
+请输入一个大于等于1000毫秒的截图时间间隔: <input type="text" id="intsec" value=1000 size = "2" ><br><br>
+<input  type="button" value="播放并截图" onclick="startSnap();"  />
+<input disabled hidden type="button" value="暂停截图" onclick="stopSnap();" />
+</div><br>
+<video id="video1" width="512" preload>
+  <source  type='video/mp4'>
+</video>
+<div id="div2" hidden >
+有效人脸图: <input type="text" id="validnum"  size = "1" disabled="true" value=0>
+无效人脸图: <input type="text" id="invalidnum"  size = "1" disabled="true" value=0>
+错误: <input type="text" id="errnum"  size = "1" disabled="true" value=0>
+<input type="button" id="fixpic" name="fixpic" onclick="window.location='http://127.0.0.1:8000/fixpic'" value="修复错误截图"/>
+</div><br> 
+<canvas id="hourCanvas" width="78" height="54" style="border:1px solid #d3d3d3;"></canvas>
+<canvas id="minCanvas" width="78" height="54" style="border:1px solid #d3d3d3;"></canvas>
+<canvas id="secCanvas" width="78" height="54" style="border:1px solid #d3d3d3;"></canvas><br>
+<canvas id="myCanvas"  style="border:1px solid #d3d3d3;">
+Your browser does not support the HTML5 canvas tag.
+</canvas>
+<script type="text/javascript" src="/static/jquery.cookie.js"></script>
+<script type="text/javascript">  
+
+	var v=document.getElementById("video1");
+	var c=document.getElementById("myCanvas");
+	var c_hour = document.getElementById("hourCanvas");
+	var c_min = document.getElementById("minCanvas");
+	var c_sec = document.getElementById("secCanvas");
+	var playstatus = false;
+	ctx=c.getContext('2d');
+	ctx_hour=c_hour.getContext('2d');
+	ctx_min=c_min.getContext('2d');
+	ctx_sec=c_sec.getContext('2d');
+	var i;
+	var intsec;
+	var snapseq;
+	var file_name;
+	var width_time = 78;
+	var height_time = 54;
+	var width_full = 1024;
+	var height_full = 576;
+	
+	v.onended = function() {
+    	window.clearInterval(i);
+		alert('视频分析结束！');
+	};
+	v.onplaying = function(){
+		//alert('onplaying');
+	};
+	v.onpause = function() {
+		///alert('onpause');
+    	//window.clearInterval(i);
+	};
+	v.oncanplay = function() {
+    	document.getElementById("div1").removeAttribute("hidden");
+    	document.getElementById("div2").removeAttribute("hidden");
+	};
+
+    function startSnap() {
+    	intsec = document.getElementById("intsec").value;
+    	if (intsec == '' || intsec < 1000) {
+    		alert("请输入一个大于等于1000毫秒的截图时间间隔");
+    	}
+    	else {
+    		if (!playstatus) {
+    			v.play();
+    			//alert('start');
+    			playstatus = true;
+				i=window.setInterval('savePhoto()',intsec);
+    		};
+    	};
+    };
+    function stopSnap() {
+        if (playstatus) {
+    		v.pause();
+    		//alert('pause');
+    		playstatus = false;
+			window.clearInterval(i);
+    	}
+    };
+	//v.addEventListener('play',function()  {i=window.setInterval('savePhoto()',intsec)},false);
+	//v.addEventListener('pause',function() {window.clearInterval(i);},true);
+	//v.addEventListener('ended',function() {window.clearInterval(i);},false);  
+	function savePhoto(){
+		snapseq = snapseq + 1;
+		document.getElementById("myCanvas").width = width_full;
+		document.getElementById("myCanvas").height = height_full;
+		ctx_hour.drawImage(v,760,80,width_time,height_time,0,0,width_time,height_time);  // hour
+		ctx_min.drawImage(v,855,80,width_time,height_time,0,0,width_time,height_time);  // min
+		ctx_sec.drawImage(v,950,80,width_time,height_time,0,0,width_time,height_time);  // sec
+		ctx.drawImage(v,0,0,width_full,height_full);
+		valid_num = document.getElementById("validnum").value;
+		invalid_num = document.getElementById("invalidnum").value;
+		err_num = document.getElementById("errnum").value;
+		//alert('1');
+        $.ajax({
+			type:"post",
+			url:"http://127.0.0.1:8000/savepic/",  //调试地址
+			dataType:"json",
+			data:{"data_info":c.toDataURL('image/png'),
+			"data_info_hour":c_hour.toDataURL('image/png'),
+			"data_info_min":c_min.toDataURL('image/png'),
+			"data_info_sec":c_sec.toDataURL('image/png'),
+			"file_name":file_name,"intsec":intsec,"snapseq":snapseq},
+			success:function(data){
+				//alert('sucess')
+				$("#validnum").val(data['valid_num']);
+				$("#invalidnum").val(data['invalid_num']);
+				$("#errnum").val(data['err_num']);
+			},
+			error:function() {
+				//alert('failed');
+			},
+			// $("#buiding").empty();
+			// $("#buiding").append(data);
+		});
+	};
+	function onInputFileChange() {  
+    	var file = document.getElementById('file').files[0]; 
+    	file_name = file.name 
+    	//alert(file_name);
+   		var url = URL.createObjectURL(file);  
+    	document.getElementById("video1").src = url;  
+    	stopSnap();
+    	document.getElementById("div1").setAttribute("hidden","hidden");
+    	document.getElementById("div2").setAttribute("hidden","hidden");
+    	clearCanvas();
+    	$("#validnum").val(0);
+		$("#invalidnum").val(0);
+		$("#errnum").val(0);
+		snapseq = 0;
+	};
+	function clearCanvas() {  
+    	ctx.clearRect(0,0,c.width,c.height);  
+	}  
+</script>
+</body>
